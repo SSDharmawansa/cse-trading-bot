@@ -1,0 +1,37 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: cse
+      POSTGRES_USER: cse
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-locally}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cse"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes: ["postgres_data:/var/lib/postgresql/data"]
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: ["redis_data:/data"]
+  migrate:
+    build: .
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      - CSE_DATABASE_URL=postgresql+asyncpg://cse:${POSTGRES_PASSWORD:-change-me-locally}@postgres:5432/cse
+    depends_on:
+      postgres: {condition: service_healthy}
+  backend:
+    build: .
+    environment:
+      - CSE_DATABASE_URL=postgresql+asyncpg://cse:${POSTGRES_PASSWORD:-change-me-locally}@postgres:5432/cse
+      - CSE_REDIS_URL=redis://redis:6379/0
+    ports: ["8000:8000"]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_started}
+volumes:
+  postgres_data:
+  redis_data:
+
